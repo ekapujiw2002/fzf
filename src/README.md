@@ -47,66 +47,40 @@ proportional to the number of CPU cores. On my MacBook Pro (Mid 2012), the new
 version was shown to be an order of magnitude faster on certain cases. It also
 starts much faster though the difference may not be noticeable.
 
-Differences with Ruby version
------------------------------
-
-The Go version is designed to be perfectly compatible with the previous Ruby
-version. The only behavioral difference is that the new version ignores the
-numeric argument to `--sort=N` option and always sorts the result regardless
-of the number of matches. The value was introduced to limit the response time
-of the query, but the Go version is blazingly fast (almost instant response
-even for 1M+ items) so I decided that it's no longer required.
-
-System requirements
--------------------
-
-Currently, prebuilt binaries are provided only for OS X and Linux. The install
-script will fall back to the legacy Ruby version on the other systems, but if
-you have Go 1.4 installed, you can try building it yourself.
-
-However, as pointed out in [golang.org/doc/install][req], the Go version may
-not run on CentOS/RHEL 5.x, and if that's the case, the install script will
-choose the Ruby version instead.
-
-The Go version depends on [ncurses][ncurses] and some Unix system calls, so it
-shouldn't run natively on Windows at the moment. But it won't be impossible to
-support Windows by falling back to a cross-platform alternative such as
-[termbox][termbox] only on Windows. If you're interested in making fzf work on
-Windows, please let me know.
-
 Build
 -----
 
+See [BUILD.md](../BUILD.md)
+
+Test
+----
+
+Unit tests can be run with `make test`. Integration tests are written in Ruby
+script that should be run on tmux.
+
 ```sh
-# Build fzf executables and tarballs
-make release
+# Unit tests
+make test
 
 # Install the executable to ../bin directory
 make install
 
-# Build executables and tarballs for Linux using Docker
-make linux
+# Integration tests
+ruby ../test/test_go.rb
 ```
-
-Contribution
-------------
-
-For the time being, I will not add or accept any new features until we can be
-sure that the implementation is stable and we have a sufficient number of test
-cases. However, fixes for obvious bugs and new test cases are welcome.
-
-I also care much about the performance of the implementation, so please make
-sure that your change does not result in performance regression. And please be
-noted that we don't have a quantitative measure of the performance yet.
 
 Third-party libraries used
 --------------------------
 
 - [ncurses][ncurses]
 - [mattn/go-runewidth](https://github.com/mattn/go-runewidth)
-    - Licensed under [MIT](http://mattn.mit-license.org/2013)
+    - Licensed under [MIT](http://mattn.mit-license.org)
 - [mattn/go-shellwords](https://github.com/mattn/go-shellwords)
-    - Licensed under [MIT](http://mattn.mit-license.org/2014)
+    - Licensed under [MIT](http://mattn.mit-license.org)
+- [mattn/go-isatty](https://github.com/mattn/go-isatty)
+    - Licensed under [MIT](http://mattn.mit-license.org)
+- [tcell](https://github.com/gdamore/tcell)
+    - Licensed under [Apache License 2.0](https://github.com/gdamore/tcell/blob/master/LICENSE)
 
 License
 -------
@@ -118,4 +92,4 @@ License
 [gil]:     http://en.wikipedia.org/wiki/Global_Interpreter_Lock
 [ncurses]: https://www.gnu.org/software/ncurses/
 [req]:     http://golang.org/doc/install
-[termbox]: https://github.com/nsf/termbox-go
+[tcell]:   https://github.com/gdamore/tcell

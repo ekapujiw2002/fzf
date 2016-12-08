@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/junegunn/fzf/src/tui"
 )
 
 type ansiOffset struct {
@@ -14,29 +16,38 @@ type ansiOffset struct {
 }
 
 type ansiState struct {
-	fg   int
-	bg   int
-	bold bool
+	fg   tui.Color
+	bg   tui.Color
+	attr tui.Attr
 }
 
 func (s *ansiState) colored() bool {
-	return s.fg != -1 || s.bg != -1 || s.bold
+	return s.fg != -1 || s.bg != -1 || s.attr > 0
 }
 
 func (s *ansiState) equals(t *ansiState) bool {
 	if t == nil {
 		return !s.colored()
 	}
-	return s.fg == t.fg && s.bg == t.bg && s.bold == t.bold
+	return s.fg == t.fg && s.bg == t.bg && s.attr == t.attr
 }
 
 var ansiRegex *regexp.Regexp
 
 func init() {
-	ansiRegex = regexp.MustCompile("\x1b\\[[0-9;]*[mK]")
+	/*
+		References:
+		- https://github.com/gnachman/iTerm2
+		- http://ascii-table.com/ansi-escape-sequences.php
+		- http://ascii-table.com/ansi-escape-sequences-vt-100.php
+		- http://tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
+	*/
+	// The following regular expression will include not all but most of the
+	// frequently used ANSI sequences
+	ansiRegex = regexp.MustCompile("\x1b[\\[()][0-9;]*[a-zA-Z@]|\x1b.|[\x08\x0e\x0f]")
 }
 
-func extractColor(str string, state *ansiState, proc func(string, *ansiState) bool) (string, []ansiOffset, *ansiState) {
+func extractColor(str string, state *ansiState, proc func(string, *ansiState) bool) (string, *[]ansiOffset, *ansiState) {
 	var offsets []ansiOffset
 	var output bytes.Buffer
 
@@ -84,18 +95,21 @@ func extractColor(str string, state *ansiState, proc func(string, *ansiState) bo
 	if proc != nil {
 		proc(rest, state)
 	}
-	return output.String(), offsets, state
+	if len(offsets) == 0 {
+		return output.String(), nil, state
+	}
+	return output.String(), &offsets, state
 }
 
 func interpretCode(ansiCode string, prevState *ansiState) *ansiState {
 	// State
 	var state *ansiState
 	if prevState == nil {
-		state = &ansiState{-1, -1, false}
+		state = &ansiState{-1, -1, 0}
 	} else {
-		state = &ansiState{prevState.fg, prevState.bg, prevState.bold}
+		state = &ansiState{prevState.fg, prevState.bg, prevState.attr}
 	}
-	if ansiCode[len(ansiCode)-1] == 'K' {
+	if ansiCode[0] != '\x1b' || ansiCode[1] != '[' || ansiCode[len(ansiCode)-1] != 'm' {
 		return state
 	}
 
@@ -105,7 +119,7 @@ func interpretCode(ansiCode string, prevState *ansiState) *ansiState {
 	init := func() {
 		state.fg = -1
 		state.bg = -1
-		state.bold = false
+		state.attr = 0
 		state256 = 0
 	}
 
@@ -129,28 +143,56 @@ func interpretCode(ansiCode string, prevState *ansiState) *ansiState {
 				case 49:
 					state.bg = -1
 				case 1:
-					state.bold = true
+					state.attr = state.attr | tui.Bold
+				case 2:
+					state.attr = state.attr | tui.Dim
+				case 3:
+					state.attr = state.attr | tui.Italic
+				case 4:
+					state.attr = state.attr | tui.Underline
+				case 5:
+					state.attr = state.attr | tui.Blink
+				case 7:
+					state.attr = state.attr | tui.Reverse
 				case 0:
 					init()
 				default:
 					if num >= 30 && num <= 37 {
-						state.fg = num - 30
+						state.fg = tui.Color(num - 30)
 					} else if num >= 40 && num <= 47 {
-						state.bg = num - 40
+						state.bg = tui.Color(num - 40)
+					} else if num >= 90 && num <= 97 {
+						state.fg = tui.Color(num - 90 + 8)
+					} else if num >= 100 && num <= 107 {
+						state.bg = tui.Color(num - 100 + 8)
 					}
 				}
 			case 1:
 				switch num {
+				case 2:
+					state256 = 10 // MAGIC
 				case 5:
 					state256++
 				default:
 					state256 = 0
 				}
 			case 2:
-				*ptr = num
+				*ptr = tui.Color(num)
+				state256 = 0
+			case 10:
+				*ptr = tui.Color(1<<24) | tui.Color(num<<16)
+				state256++
+			case 11:
+				*ptr = *ptr | tui.Color(num<<8)
+				state256++
+			case 12:
+				*ptr = *ptr | tui.Color(num)
 				state256 = 0
 			}
 		}
+	}
+	if state256 > 0 {
+		*ptr = -1
 	}
 	return state
 }
